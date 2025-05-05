@@ -10,12 +10,27 @@ from fastapi.openapi.utils import get_openapi
 import os
 from typing import Optional
 from psycopg2 import pool
+from contextlib import asynccontextmanager
+
+# Connection pool
+connection_pool = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_connection_pool()
+    yield
+    # Shutdown
+    if connection_pool:
+        connection_pool.closeall()
+        logger.info("Connection pool closed")
 
 # FastAPI app instance
 app = FastAPI(
     title="Ingredients API",
     description="API for managing ingredients",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -41,9 +56,6 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "npg_wTW2nR0sbOKh")
 DB_HOST = os.getenv("DB_HOST", "ep-steep-bread-a5km0kjc-pooler.us-east-2.aws.neon.tech")
 DB_PORT = os.getenv("DB_PORT", "5432")
 SSL_MODE = os.getenv("SSL_MODE", "require")
-
-# Connection pool
-connection_pool = None
 
 def init_connection_pool():
     global connection_pool
@@ -233,15 +245,3 @@ async def update_ingredient(ingredient_id: int, ingredient_update: IngredientUpd
         raise HTTPException(status_code=503, detail=str(ce))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating ingredient: {str(e)}")
-
-# Initialize connection pool on startup
-@app.on_event("startup")
-async def startup_event():
-    init_connection_pool()
-
-# Clean up connection pool on shutdown
-@app.on_event("shutdown")
-async def shutdown_event():
-    if connection_pool:
-        connection_pool.closeall()
-        logger.info("Connection pool closed")
